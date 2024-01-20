@@ -9,8 +9,9 @@ namespace _Project.Scripts
         [SerializeField] private CameraControllerConfigSO config;
         [SerializeField] private Transform target;
         [SerializeField] private CinemachineVirtualCamera cinemachineVirtualCamera;
-        
+
         [SerializeField] private bool useEdgeScrolling;
+        [SerializeField] private InputService inputService;
 
         private bool _dragPanMoveActive;
         private Vector2 _lastMousePosition;
@@ -18,23 +19,32 @@ namespace _Project.Scripts
         private void Update()
         {
             HandleMovement();
-            HandleRotation();
-            HandleZoom();
         }
 
-        private void HandleZoom()
+        private void Start()
+        {
+            inputService.OnRotationApplied += RotateTarget;
+            inputService.OnZoomApplied += Zoom;
+
+            inputService.OnDragPanMovementActivation += ActivateDragPanMovement;
+            inputService.OnDragPanMovementDeactivation += DeactivateDragPanMovement;
+        }
+
+        private void DeactivateDragPanMovement()
+        {
+            _dragPanMoveActive = false;
+        }
+
+        private void ActivateDragPanMovement()
+        {
+            _dragPanMoveActive = true;
+
+            _lastMousePosition = Input.mousePosition;
+        }
+
+        private void Zoom(float zoom)
         {
             float targetFov = cinemachineVirtualCamera.m_Lens.FieldOfView;
-
-            float zoom = 0f;
-            if (Input.mouseScrollDelta.y > 0)
-            {
-                zoom = -1f;
-            }
-            else if (Input.mouseScrollDelta.y < 0)
-            {
-                zoom = 1f;
-            }
 
             targetFov += zoom * config.zoomDistance;
             targetFov = Mathf.Clamp(targetFov, config.minFov, config.maxFov);
@@ -44,48 +54,24 @@ namespace _Project.Scripts
                 Time.deltaTime * config.zoomSpeed);
         }
 
-        private void HandleRotation()
-        {
-            float rotation = 0f;
-            if (Input.GetKey(KeyCode.Q))
-            {
-                rotation = 1f;
-            }
-            else if (Input.GetKey(KeyCode.E))
-            {
-                rotation = -1f;
-            }
-
-            RotateTarget(rotation);
-        }
-
         private void HandleMovement()
         {
-            var horizontal = Input.GetAxis("Horizontal");
-            var vertical = Input.GetAxis("Vertical");
+            var movementInput = inputService.GetMovementInput();
+            var horizontal = movementInput.x;
+            var vertical = movementInput.y;
+
+            Vector2 mousePosition = inputService.GetMousePosition();
 
             if (useEdgeScrolling)
             {
-                ReadEdgeScrollingInput(ref horizontal, ref vertical);
-            }
-
-            if (Input.GetMouseButtonDown(1))
-            {
-                _dragPanMoveActive = true;
-
-                _lastMousePosition = Input.mousePosition;
-            }
-
-            if (Input.GetMouseButtonUp(1))
-            {
-                _dragPanMoveActive = false;
+                ReadEdgeScrollingInput(mousePosition, ref horizontal, ref vertical);
             }
 
             if (_dragPanMoveActive)
             {
-                var delta = (Vector2)Input.mousePosition - _lastMousePosition;
+                var delta = mousePosition - _lastMousePosition;
 
-                _lastMousePosition = Input.mousePosition;
+                _lastMousePosition = mousePosition;
                 horizontal = -delta.x * config.dragPanSpeedModifier;
                 vertical = -delta.y * config.dragPanSpeedModifier;
             }
@@ -93,22 +79,22 @@ namespace _Project.Scripts
             MoveTarget(horizontal, vertical);
         }
 
-        private void ReadEdgeScrollingInput(ref float horizontal, ref float vertical)
+        private void ReadEdgeScrollingInput(Vector2 mousePosition, ref float horizontal, ref float vertical)
         {
-            if (Input.mousePosition.x < config.edgeScrollingBorderThickness)
+            if (mousePosition.x < config.edgeScrollingBorderThickness)
             {
                 horizontal = -1f;
             }
-            else if (Input.mousePosition.x > Screen.width - config.edgeScrollingBorderThickness)
+            else if (mousePosition.x > Screen.width - config.edgeScrollingBorderThickness)
             {
                 horizontal = 1f;
             }
 
-            if (Input.mousePosition.y < config.edgeScrollingBorderThickness)
+            if (mousePosition.y < config.edgeScrollingBorderThickness)
             {
                 vertical = -1f;
             }
-            else if (Input.mousePosition.y > Screen.height - config.edgeScrollingBorderThickness)
+            else if (mousePosition.y > Screen.height - config.edgeScrollingBorderThickness)
             {
                 vertical = 1f;
             }
@@ -116,8 +102,8 @@ namespace _Project.Scripts
 
         private void MoveTarget(float horizontal, float vertical)
         {
-            target.transform.position += target.transform.forward * (vertical * config.speed * Time.deltaTime);
-            target.transform.position += target.transform.right * (horizontal * config.speed * Time.deltaTime);
+            target.position += target.forward * (vertical * config.speed * Time.deltaTime);
+            target.position += target.right * (horizontal * config.speed * Time.deltaTime);
         }
 
         private void RotateTarget(float rotation)
